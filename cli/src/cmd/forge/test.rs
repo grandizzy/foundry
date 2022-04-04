@@ -74,6 +74,7 @@ impl FileFilter for Filter {
     /// [FoundryPathExr::is_sol_test()]
     fn is_match(&self, file: &Path) -> bool {
         if let Some(file) = file.as_os_str().to_str() {
+            println!("Path is {}", file);
             if let Some(ref re_path) = &self.pattern {
                 return re_path.is_match(file)
             }
@@ -84,6 +85,12 @@ impl FileFilter for Filter {
                 return !re_path.is_match(file)
             }
         }
+        if file.is_sol_test() {
+            println!("Path is SOL test!");
+        } else {
+            println!("Path is NOT a SOL test!");
+        } 
+        
         file.is_sol_test()
     }
 }

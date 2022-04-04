@@ -214,6 +214,7 @@ pub fn recurse_link<'a>(
         // for each dependency, try to link
         dependencies.iter().for_each(|(next_target, file, key)| {
             // get the dependency
+            println!("Next target to check is {}", next_target.to_string());
             let contract = contracts.get(next_target).expect("No target contract").clone();
             let mut next_target_bytecode = contract.bytecode.expect("No target bytecode");
             let mut next_target_runtime_bytecode = contract
