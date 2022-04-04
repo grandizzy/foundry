@@ -74,10 +74,13 @@ impl FileFilter for Filter {
     /// [FoundryPathExr::is_sol_test()]
     fn is_match(&self, file: &Path) -> bool {
         if let Some(file) = file.as_os_str().to_str() {
+            if let Some(ref re_path) = &self.pattern {
+                return re_path.is_match(file)
+            }
             if let Some(ref re_path) = self.path_pattern {
                 return re_path.is_match(file)
             }
-            if let Some(ref re_path) = self.test_pattern_inverse {
+            if let Some(ref re_path) = self.path_pattern_inverse {
                 return !re_path.is_match(file)
             }
         }
