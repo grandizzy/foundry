@@ -27,6 +27,7 @@ mod inspector;
 pub use inspector::{BroadcastableTransaction, BroadcastableTransactions, Cheatcodes, Context};
 
 mod base64;
+mod context;
 mod env;
 mod evm;
 mod fs;
@@ -36,6 +37,7 @@ mod string;
 mod test;
 mod utils;
 
+pub use context::ForgeContext;
 pub use script::ScriptWallets;
 pub use test::expect::ExpectedCallTracker;
 

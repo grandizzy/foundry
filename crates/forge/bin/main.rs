@@ -10,6 +10,7 @@ mod cmd;
 mod opts;
 
 use cmd::{cache::CacheSubcommands, generate::GenerateSubcommands, watch};
+use foundry_evm::inspectors::cheatcodes::ForgeContext;
 use opts::{Forge, ForgeSubcommand};
 
 fn main() -> Result<()> {
@@ -19,6 +20,8 @@ fn main() -> Result<()> {
     utils::enable_paint();
 
     let opts = Forge::parse();
+    init_execution_context(&opts.cmd);
+
     match opts.cmd {
         ForgeSubcommand::Test(cmd) => {
             if cmd.is_watch() {
@@ -102,4 +105,23 @@ fn main() -> Result<()> {
             GenerateSubcommands::Test(cmd) => cmd.run(),
         },
     }
+}
+
+fn init_execution_context(subcommand: &ForgeSubcommand) {
+    let context = match subcommand {
+        ForgeSubcommand::Test(_) => ForgeContext::Test,
+        ForgeSubcommand::Script(cmd) => {
+            if cmd.broadcast {
+                ForgeContext::ScriptBroadcast
+            } else if cmd.resume {
+                ForgeContext::ScriptResume
+            } else {
+                ForgeContext::ScriptDryRun
+            }
+        }
+        ForgeSubcommand::Coverage(_) => ForgeContext::Coverage,
+        ForgeSubcommand::Snapshot(_) => ForgeContext::Snapshot,
+        _ => ForgeContext::Unknown,
+    };
+    ForgeContext::set_execution_context(context);
 }

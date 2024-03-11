@@ -114,6 +114,12 @@ pub enum Group {
     ///
     /// Safety: safe.
     Utilities,
+    /// Cheatcodes that returns forge execution context.
+    ///
+    /// Examples: `isTestContext`.
+    ///
+    /// Safety: safe.
+    Context,
 }
 
 impl Group {
@@ -130,6 +136,7 @@ impl Group {
             Self::Environment |
             Self::String |
             Self::Json |
+            Self::Context |
             Self::Utilities => Some(Safety::Safe),
         }
     }
@@ -146,6 +153,7 @@ impl Group {
             Self::String => "string",
             Self::Json => "json",
             Self::Utilities => "utilities",
+            Self::Context => "context",
         }
     }
 }
