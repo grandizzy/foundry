@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         ForgeSubcommand::Script(cmd) => {
             // install the shell before executing the command
             foundry_common::shell::set_shell(foundry_common::shell::Shell::from_args(
-                cmd.opts.args.silent,
+                cmd.opts.silent,
                 cmd.json,
             ))?;
             utils::block_on(cmd.run_script())
@@ -107,6 +107,8 @@ fn main() -> Result<()> {
     }
 }
 
+/// Set the program execution context based on `forge` subcommand used.
+/// The execution context can be set only once per program, and it can be checked by using cheatcodes.
 fn init_execution_context(subcommand: &ForgeSubcommand) {
     let context = match subcommand {
         ForgeSubcommand::Test(_) => ForgeContext::Test,

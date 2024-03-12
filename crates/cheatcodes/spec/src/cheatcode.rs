@@ -108,15 +108,21 @@ pub enum Group {
     ///
     /// Safety: safe.
     Json,
+    /// Utility cheatcodes that deal with parsing values from and converting values to TOML.
+    ///
+    /// Examples: `parseToml`, `writeToml`.
+    ///
+    /// Safety: safe.
+    Toml,
     /// Generic, uncategorized utilities.
     ///
     /// Examples: `toString`, `parse*`, `serialize*`.
     ///
     /// Safety: safe.
     Utilities,
-    /// Cheatcodes that returns forge execution context.
+    /// Utility cheatcodes to check forge execution context.
     ///
-    /// Examples: `isTestContext`.
+    /// Examples: `isTestContext`, `isScriptBroadcastContext`.
     ///
     /// Safety: safe.
     Context,
@@ -136,6 +142,7 @@ impl Group {
             Self::Environment |
             Self::String |
             Self::Json |
+            Self::Toml |
             Self::Context |
             Self::Utilities => Some(Safety::Safe),
         }
@@ -152,6 +159,7 @@ impl Group {
             Self::Environment => "environment",
             Self::String => "string",
             Self::Json => "json",
+            Self::Toml => "toml",
             Self::Utilities => "utilities",
             Self::Context => "context",
         }

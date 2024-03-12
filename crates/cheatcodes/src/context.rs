@@ -71,5 +71,5 @@ impl Cheatcode for isScriptResumeContextCall {
 }
 
 fn is_forge_context(context: ForgeContext) -> bool {
-    discriminant(&context) == discriminant(&FORGE_CONTEXT.get().unwrap())
+    discriminant(&context) == discriminant(FORGE_CONTEXT.get().unwrap())
 }
