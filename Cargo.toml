@@ -20,7 +20,7 @@ members = [
     "crates/evm/traces/",
     "crates/fmt/",
     "crates/forge/",
-    "crates/macros/",
+    "crates/macros/", "crates/metrics",
     "crates/test-utils/",
 ]
 resolver = "2"
@@ -137,6 +137,7 @@ foundry-macros = { path = "crates/macros" }
 foundry-test-utils = { path = "crates/test-utils" }
 foundry-wallets = { path = "crates/wallets" }
 foundry-linking = { path = "crates/linking" }
+foundry-metrics = { path = "crates/metrics" }
 
 # solc & compilation utilities
 foundry-block-explorers = { version = "0.2.3", default-features = false }

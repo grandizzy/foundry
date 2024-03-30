@@ -1263,6 +1263,9 @@ interface Vm {
         string calldata error
     ) external pure;
 
+    #[cheatcode(group = Testing, safety = Safe)]
+    function incrementMetrics(string calldata key) external;
+
     // ======== OS and Filesystem ========
 
     // -------- Metadata --------

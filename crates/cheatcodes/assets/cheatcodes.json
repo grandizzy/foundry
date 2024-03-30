@@ -7957,6 +7957,26 @@
       "group": "toml",
       "status": "stable",
       "safety": "safe"
+    },
+    {
+      "func": {
+        "id": "incrementMetrics",
+        "description": "Increment count metrics.",
+        "declaration": "function incrementMetrics(string calldata key) external;",
+        "visibility": "external",
+        "mutability": "",
+        "signature": "incrementMetrics(string)",
+        "selector": "0x842fa908",
+        "selectorBytes": [
+          132,
+          47,
+          169,
+          8
+        ]
+      },
+      "group": "testing",
+      "status": "stable",
+      "safety": "safe"
     }
   ]
 }

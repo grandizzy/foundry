@@ -93,3 +93,11 @@ fn breakpoint(state: &mut Cheatcodes, caller: &Address, s: &str, add: bool) -> R
 
     Ok(Default::default())
 }
+
+impl Cheatcode for incrementMetricsCall {
+    fn apply(&self, _state: &mut Cheatcodes) -> Result {
+        let Self { key } = self;
+        foundry_metrics::increment_metrics(key.to_string());
+        Ok(Default::default())
+    }
+}

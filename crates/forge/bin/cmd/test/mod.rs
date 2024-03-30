@@ -40,6 +40,7 @@ use summary::TestSummaryReporter;
 
 pub use filter::FilterArgs;
 use forge::traces::render_trace_arena;
+use foundry_metrics::{init_metrics_reporter, shutdown_metrics_reporter};
 
 // Loads project's figment and merges the build cli arguments into it
 foundry_config::merge_impl_figment_convert!(TestArgs, opts, evm_opts);
@@ -129,9 +130,12 @@ impl TestArgs {
     }
 
     pub async fn run(self) -> Result<TestOutcome> {
+        init_metrics_reporter();
         trace!(target: "forge::test", "executing test command");
         shell::set_shell(shell::Shell::from_args(self.opts.silent, self.json))?;
-        self.execute_tests().await
+        let result = self.execute_tests().await;
+        shutdown_metrics_reporter();
+        result
     }
 
     /// Executes all the tests in the project.
