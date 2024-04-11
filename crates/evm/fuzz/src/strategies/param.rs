@@ -1,4 +1,5 @@
 use super::state::EvmFuzzState;
+use crate::strategies::fixture_strategy;
 use alloy_dyn_abi::{DynSolType, DynSolValue};
 use alloy_primitives::{Address, B256, I256, U256};
 use proptest::prelude::*;
@@ -26,7 +27,10 @@ pub fn fuzz_param(
     fuzz_fixtures: Option<&[DynSolValue]>,
 ) -> BoxedStrategy<DynSolValue> {
     match *param {
-        DynSolType::Address => super::AddressStrategy::init(fuzz_fixtures),
+        DynSolType::Address => fixture_strategy!(
+            fuzz_fixtures,
+            DynSolValue::type_strategy(&DynSolType::Address).boxed()
+        ),
         DynSolType::Int(n @ 8..=256) => super::IntStrategy::new(n, fuzz_fixtures)
             .prop_map(move |x| DynSolValue::Int(x, n))
             .boxed(),
@@ -34,11 +38,23 @@ pub fn fuzz_param(
             .prop_map(move |x| DynSolValue::Uint(x, n))
             .boxed(),
         DynSolType::Function | DynSolType::Bool => DynSolValue::type_strategy(param).boxed(),
-        DynSolType::Bytes => super::BytesStrategy::init(fuzz_fixtures),
-        DynSolType::FixedBytes(size @ 1..=32) => {
-            super::FixedBytesStrategy::init(size, fuzz_fixtures)
+        DynSolType::Bytes => {
+            fixture_strategy!(fuzz_fixtures, DynSolValue::type_strategy(&DynSolType::Bytes).boxed())
         }
-        DynSolType::String => super::StringStrategy::init(fuzz_fixtures),
+        DynSolType::FixedBytes(size @ 1..=32) => fixture_strategy!(
+            fuzz_fixtures,
+            DynSolValue::type_strategy(&DynSolType::FixedBytes(size)).boxed()
+        ),
+        DynSolType::String => fixture_strategy!(
+            fuzz_fixtures,
+            DynSolValue::type_strategy(&DynSolType::String)
+                .prop_map(move |value| {
+                    DynSolValue::String(
+                        value.as_str().unwrap().trim().trim_end_matches('\0').to_string(),
+                    )
+                })
+                .boxed()
+        ),
         DynSolType::Tuple(ref params) => params
             .iter()
             .map(|p| fuzz_param(p, None))
