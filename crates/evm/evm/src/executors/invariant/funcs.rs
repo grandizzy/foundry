@@ -4,6 +4,7 @@ use alloy_dyn_abi::JsonAbiExt;
 use alloy_json_abi::Function;
 use alloy_primitives::Log;
 use foundry_common::{ContractsByAddress, ContractsByArtifact};
+use foundry_config::InvariantConfig;
 use foundry_evm_core::constants::CALLER;
 use foundry_evm_coverage::HitMaps;
 use foundry_evm_fuzz::invariant::{BasicTxDetails, FuzzRunIdentifiedContracts, InvariantContract};
@@ -16,12 +17,11 @@ use std::borrow::Cow;
 /// Either returns the call result if successful, or nothing if there was an error.
 pub fn assert_invariants(
     invariant_contract: &InvariantContract<'_>,
+    invariant_config: &InvariantConfig,
     targeted_contracts: &FuzzRunIdentifiedContracts,
     executor: &Executor,
     calldata: &[BasicTxDetails],
     invariant_failures: &mut InvariantFailures,
-    shrink_sequence: bool,
-    shrink_run_limit: usize,
 ) -> eyre::Result<Option<RawCallResult>> {
     let mut inner_sequence = vec![];
 
@@ -51,12 +51,12 @@ pub fn assert_invariants(
             let case_data = FailedInvariantCaseData::new(
                 invariant_contract,
                 targeted_contracts,
-                Some(func),
                 calldata,
                 call_result,
                 &inner_sequence,
-                shrink_sequence,
-                shrink_run_limit,
+                invariant_config.shrink_sequence,
+                invariant_config.shrink_run_limit,
+                invariant_config.fail_on_revert,
             );
             invariant_failures.error = Some(InvariantFuzzError::BrokenInvariant(case_data));
             return Ok(None);

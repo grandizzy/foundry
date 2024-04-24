@@ -1,6 +1,5 @@
 use super::{BasicTxDetails, InvariantContract};
 use crate::executors::{invariant::shrink::CallSequenceShrinker, Executor, RawCallResult};
-use alloy_json_abi::Function;
 use alloy_primitives::{Address, Bytes, Log};
 use eyre::Result;
 use foundry_common::contracts::{ContractsByAddress, ContractsByArtifact};
@@ -87,13 +86,15 @@ pub struct FailedInvariantCaseData {
     /// Address of the invariant asserter.
     pub addr: Address,
     /// Function data for invariant check.
-    pub func: Option<Bytes>,
+    pub func: Bytes,
     /// Inner fuzzing Sequence coming from overriding calls.
     pub inner_sequence: Vec<Option<BasicTxDetails>>,
     /// Shrink the failed test case to the smallest sequence.
     pub shrink: bool,
     /// Shrink run limit
     pub shrink_run_limit: usize,
+    /// Fail if sequence reverts.
+    pub fail_on_revert: bool,
 }
 
 impl FailedInvariantCaseData {
@@ -101,19 +102,13 @@ impl FailedInvariantCaseData {
     pub fn new(
         invariant_contract: &InvariantContract<'_>,
         targeted_contracts: &FuzzRunIdentifiedContracts,
-        error_func: Option<&Function>,
         calldata: &[BasicTxDetails],
         call_result: RawCallResult,
         inner_sequence: &[Option<BasicTxDetails>],
         shrink: bool,
         shrink_run_limit: usize,
+        fail_on_revert: bool,
     ) -> Self {
-        let (func, origin) = if let Some(f) = error_func {
-            (Some(f.selector().to_vec().into()), f.name.as_str())
-        } else {
-            (None, "Revert")
-        };
-
         // Collect abis of fuzzed and invariant contracts to decode custom error.
         let targets = targeted_contracts.targets.lock();
         let abis = targets
@@ -125,6 +120,8 @@ impl FailedInvariantCaseData {
             .with_abis(abis)
             .decode(call_result.result.as_ref(), Some(call_result.exit_reason));
 
+        let func = invariant_contract.invariant_function;
+        let origin = func.name.as_str();
         Self {
             logs: call_result.logs,
             traces: call_result.traces,
@@ -135,10 +132,11 @@ impl FailedInvariantCaseData {
             return_reason: "".into(),
             revert_reason,
             addr: invariant_contract.address,
-            func,
+            func: func.selector().to_vec().into(),
             inner_sequence: inner_sequence.to_vec(),
             shrink,
             shrink_run_limit,
+            fail_on_revert,
         }
     }
 
@@ -192,16 +190,12 @@ impl FailedInvariantCaseData {
             ));
 
             // Checks the invariant.
-            if let Some(func) = &self.func {
-                let error_call_result =
-                    executor.call_raw(CALLER, self.addr, func.clone(), U256::ZERO)?;
-
-                traces.push((TraceKind::Execution, error_call_result.traces.clone().unwrap()));
-
-                logs.extend(error_call_result.logs);
-                if error_call_result.reverted {
-                    break
-                }
+            let error_call_result =
+                executor.call_raw(CALLER, self.addr, self.func.clone(), U256::ZERO)?;
+            traces.push((TraceKind::Execution, error_call_result.traces.clone().unwrap()));
+            logs.extend(error_call_result.logs);
+            if error_call_result.reverted {
+                break
             }
         }
 
@@ -221,12 +215,10 @@ impl FailedInvariantCaseData {
 
         // Special case test: the invariant is *unsatisfiable* - it took 0 calls to
         // break the invariant -- consider emitting a warning.
-        if let Some(func) = &self.func {
-            let error_call_result =
-                executor.call_raw(CALLER, self.addr, func.clone(), U256::ZERO)?;
-            if error_call_result.reverted {
-                return Ok(vec![]);
-            }
+        let error_call_result =
+            executor.call_raw(CALLER, self.addr, self.func.clone(), U256::ZERO)?;
+        if error_call_result.reverted {
+            return Ok(vec![]);
         }
 
         let mut shrinker = CallSequenceShrinker::new((0..calls.len()).collect());
@@ -273,11 +265,23 @@ impl FailedInvariantCaseData {
         calls: &[BasicTxDetails],
         sequence: Vec<usize>,
     ) -> bool {
+        let mut sequence_failed = false;
         // Apply the shrinked candidate sequence.
-        sequence.iter().for_each(|call_index| {
-            let (sender, (addr, bytes)) = &calls[*call_index];
-            executor.call_raw_committing(*sender, *addr, bytes.clone(), U256::ZERO).unwrap();
-        });
+        for call_index in sequence {
+            let (sender, (addr, bytes)) = &calls[call_index];
+            let call_result =
+                executor.call_raw_committing(*sender, *addr, bytes.clone(), U256::ZERO).unwrap();
+            if call_result.reverted && self.fail_on_revert {
+                // Candidate sequence fails test.
+                // We don't have to apply remaining calls to check sequence.
+                sequence_failed = true;
+                break;
+            }
+        }
+        // Return without checking the invariant if we already identified that sequence fails.
+        if sequence_failed {
+            return false;
+        };
 
         // Check the invariant for candidate sequence.
         // If sequence fails then we can continue with shrinking - the removed call does not affect
@@ -285,19 +289,14 @@ impl FailedInvariantCaseData {
         //
         // If sequence doesn't fail then we have to restore last removed call and continue with next
         // call - removed call is a required step for reproducing the failure.
-        if let Some(func) = &self.func {
-            let mut call_result =
-                executor.call_raw(CALLER, self.addr, func.clone(), U256::ZERO).unwrap();
-            executor.is_raw_call_success(
-                self.addr,
-                Cow::Owned(call_result.state_changeset.take().unwrap()),
-                &call_result,
-                false,
-            )
-        } else {
-            // Invariant function is not set, return true as we cannot test the sequence.
-            true
-        }
+        let mut call_result =
+            executor.call_raw(CALLER, self.addr, self.func.clone(), U256::ZERO).unwrap();
+        executor.is_raw_call_success(
+            self.addr,
+            Cow::Owned(call_result.state_changeset.take().unwrap()),
+            &call_result,
+            false,
+        )
     }
 }
 

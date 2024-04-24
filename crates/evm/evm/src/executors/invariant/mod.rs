@@ -178,12 +178,11 @@ impl<'a> InvariantExecutor<'a> {
         // This does not count as a fuzz run. It will just register the revert.
         let last_call_results = RefCell::new(assert_invariants(
             &invariant_contract,
+            &self.config,
             &targeted_contracts,
             &self.executor,
             &[],
             &mut failures.borrow_mut(),
-            self.config.shrink_sequence,
-            self.config.shrink_run_limit,
         )?);
 
         if last_call_results.borrow().is_none() {
@@ -283,6 +282,7 @@ impl<'a> InvariantExecutor<'a> {
                             self.config.fail_on_revert,
                             self.config.shrink_sequence,
                             self.config.shrink_run_limit,
+                            &self.config,
                             &mut run_traces,
                         )
                         .map_err(|e| TestCaseError::fail(e.to_string()))?;
@@ -705,6 +705,7 @@ fn can_continue(
     fail_on_revert: bool,
     shrink_sequence: bool,
     shrink_run_limit: usize,
+    invariant_config: &InvariantConfig,
     run_traces: &mut Vec<CallTraceArena>,
 ) -> eyre::Result<RichInvariantResults> {
     let mut call_results = None;
@@ -722,12 +723,11 @@ fn can_continue(
 
         call_results = assert_invariants(
             invariant_contract,
+            invariant_config,
             targeted_contracts,
             executor,
             calldata,
             failures,
-            shrink_sequence,
-            shrink_run_limit,
         )?;
         if call_results.is_none() {
             return Ok(RichInvariantResults::new(false, None));
@@ -740,12 +740,12 @@ fn can_continue(
             let case_data = FailedInvariantCaseData::new(
                 invariant_contract,
                 targeted_contracts,
-                None,
                 calldata,
                 call_result,
                 &[],
                 shrink_sequence,
                 shrink_run_limit,
+                fail_on_revert,
             );
             failures.revert_reason = Some(case_data.revert_reason.clone());
             let error = InvariantFuzzError::Revert(case_data);
