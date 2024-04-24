@@ -22,6 +22,6 @@ contract ShrinkFailOnRevertTest is DSTest {
         target = new ShrinkFailOnRevert();
     }
 
-    function invariant_check_shrink_with_fail_on_revert() public view {
+    function invariant_shrink_fail_on_revert() public view {
     }
 }
