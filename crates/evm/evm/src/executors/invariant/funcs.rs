@@ -3,6 +3,7 @@ use crate::executors::{Executor, RawCallResult};
 use alloy_dyn_abi::JsonAbiExt;
 use alloy_json_abi::Function;
 use alloy_primitives::Log;
+use eyre::Result;
 use foundry_common::{ContractsByAddress, ContractsByArtifact};
 use foundry_config::InvariantConfig;
 use foundry_evm_core::constants::CALLER;
@@ -22,7 +23,7 @@ pub fn assert_invariants(
     executor: &Executor,
     calldata: &[BasicTxDetails],
     invariant_failures: &mut InvariantFailures,
-) -> eyre::Result<Option<RawCallResult>> {
+) -> Result<Option<RawCallResult>> {
     let mut inner_sequence = vec![];
 
     if let Some(fuzzer) = &executor.inspector.fuzzer {
@@ -50,13 +51,11 @@ pub fn assert_invariants(
         if invariant_failures.error.is_none() {
             let case_data = FailedInvariantCaseData::new(
                 invariant_contract,
+                invariant_config,
                 targeted_contracts,
                 calldata,
                 call_result,
                 &inner_sequence,
-                invariant_config.shrink_sequence,
-                invariant_config.shrink_run_limit,
-                invariant_config.fail_on_revert,
             );
             invariant_failures.error = Some(InvariantFuzzError::BrokenInvariant(case_data));
             return Ok(None);
@@ -78,7 +77,7 @@ pub fn replay_run(
     coverage: &mut Option<HitMaps>,
     func: Function,
     inputs: Vec<BasicTxDetails>,
-) -> eyre::Result<()> {
+) -> Result<()> {
     // We want traces for a failed case.
     executor.set_tracing(true);
 

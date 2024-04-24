@@ -3,6 +3,7 @@ use crate::executors::{invariant::shrink::CallSequenceShrinker, Executor, RawCal
 use alloy_primitives::{Address, Bytes, Log};
 use eyre::Result;
 use foundry_common::contracts::{ContractsByAddress, ContractsByArtifact};
+use foundry_config::InvariantConfig;
 use foundry_evm_core::{constants::CALLER, decode::RevertDecoder};
 use foundry_evm_fuzz::{
     invariant::FuzzRunIdentifiedContracts, BaseCounterExample, CounterExample, FuzzedCases, Reason,
@@ -90,24 +91,21 @@ pub struct FailedInvariantCaseData {
     /// Inner fuzzing Sequence coming from overriding calls.
     pub inner_sequence: Vec<Option<BasicTxDetails>>,
     /// Shrink the failed test case to the smallest sequence.
-    pub shrink: bool,
+    pub shrink_sequence: bool,
     /// Shrink run limit
     pub shrink_run_limit: usize,
-    /// Fail if sequence reverts.
+    /// Fail on revert, used to check sequence when shrinking.
     pub fail_on_revert: bool,
 }
 
 impl FailedInvariantCaseData {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         invariant_contract: &InvariantContract<'_>,
+        invariant_config: &InvariantConfig,
         targeted_contracts: &FuzzRunIdentifiedContracts,
         calldata: &[BasicTxDetails],
         call_result: RawCallResult,
         inner_sequence: &[Option<BasicTxDetails>],
-        shrink: bool,
-        shrink_run_limit: usize,
-        fail_on_revert: bool,
     ) -> Self {
         // Collect abis of fuzzed and invariant contracts to decode custom error.
         let targets = targeted_contracts.targets.lock();
@@ -134,13 +132,13 @@ impl FailedInvariantCaseData {
             addr: invariant_contract.address,
             func: func.selector().to_vec().into(),
             inner_sequence: inner_sequence.to_vec(),
-            shrink,
-            shrink_run_limit,
-            fail_on_revert,
+            shrink_sequence: invariant_config.shrink_sequence,
+            shrink_run_limit: invariant_config.shrink_run_limit,
+            fail_on_revert: invariant_config.fail_on_revert,
         }
     }
 
-    /// Replays the error case and collects all necessary traces.
+    /// Replays the error case, shrinks the failing sequence and collects all necessary traces.
     pub fn replay(
         &self,
         mut executor: Executor,
@@ -156,7 +154,7 @@ impl FailedInvariantCaseData {
             TestError::Fail(_, ref calls) => calls.clone(),
         };
 
-        if self.shrink {
+        if self.shrink_sequence {
             calls = self.shrink_sequence(&calls, &executor)?.into_iter().cloned().collect();
         } else {
             trace!(target: "forge::test", "Shrinking disabled.");
