@@ -410,16 +410,14 @@ impl<'a> ContractRunner<'a> {
         }
         let _guard = span.enter();
 
-        let TestSetup {
-            address, mut logs, mut traces, mut labeled_addresses, mut coverage, ..
-        } = setup;
-
         // Run unit test
         let mut executor = self.executor.clone();
-        let start: Instant = Instant::now();
+        let start = Instant::now();
+        let mut test_result = TestResult::new(&setup);
+
         let (raw_call_result, reason) = match executor.execute_test(
             self.sender,
-            address,
+            setup.address,
             func,
             &[],
             U256::ZERO,
@@ -428,28 +426,22 @@ impl<'a> ContractRunner<'a> {
             Ok(res) => (res.raw, None),
             Err(EvmError::Execution(err)) => (err.raw, Some(err.reason)),
             Err(EvmError::SkipError) => {
-                return TestResult {
-                    status: TestStatus::Skipped,
-                    reason: None,
-                    decoded_logs: decode_console_logs(&logs),
-                    traces,
-                    labeled_addresses,
-                    kind: TestKind::Standard(0),
-                    duration: start.elapsed(),
-                    ..Default::default()
-                }
+                test_result.end_execution(
+                    TestKind::Standard(0),
+                    TestStatus::Skipped,
+                    None,
+                    start.elapsed(),
+                );
+                return test_result
             }
             Err(err) => {
-                return TestResult {
-                    status: TestStatus::Failure,
-                    reason: Some(err.to_string()),
-                    decoded_logs: decode_console_logs(&logs),
-                    traces,
-                    labeled_addresses,
-                    kind: TestKind::Standard(0),
-                    duration: start.elapsed(),
-                    ..Default::default()
-                }
+                test_result.end_execution(
+                    TestKind::Standard(0),
+                    TestStatus::Failure,
+                    Some(err.to_string()),
+                    start.elapsed(),
+                );
+                return test_result
             }
         };
 
@@ -466,14 +458,6 @@ impl<'a> ContractRunner<'a> {
             cheatcodes,
             ..
         } = raw_call_result;
-
-        let breakpoints = cheatcodes.map(|c| c.breakpoints).unwrap_or_default();
-        let debug_arena = debug;
-        traces.extend(execution_trace.map(|traces| (TraceKind::Execution, traces)));
-        labeled_addresses.extend(new_labels);
-        logs.extend(execution_logs);
-        coverage = merge_coverages(coverage, execution_coverage);
-
         let success = executor.is_success(
             setup.address,
             reverted,
@@ -481,28 +465,26 @@ impl<'a> ContractRunner<'a> {
             should_fail,
         );
 
-        // Record test execution time
-        let duration = start.elapsed();
-        trace!(?duration, gas, reverted, should_fail, success);
+        // Collect execution result outcome.
+        test_result.breakpoints = cheatcodes.map(|c| c.breakpoints).unwrap_or_default();
+        test_result.debug = debug;
+        test_result.traces.extend(execution_trace.map(|traces| (TraceKind::Execution, traces)));
+        test_result.labeled_addresses.extend(new_labels);
+        test_result.logs.extend(execution_logs);
+        test_result.coverage = merge_coverages(test_result.coverage, execution_coverage);
 
-        TestResult {
-            status: match success {
+        // Determine test result and record execution time
+        test_result.end_execution(
+            TestKind::Standard(gas.overflowing_sub(stipend).0),
+            match success {
                 true => TestStatus::Success,
                 false => TestStatus::Failure,
             },
             reason,
-            counterexample: None,
-            decoded_logs: decode_console_logs(&logs),
-            logs,
-            kind: TestKind::Standard(gas.overflowing_sub(stipend).0),
-            traces,
-            coverage,
-            labeled_addresses,
-            debug: debug_arena,
-            breakpoints,
-            duration,
-            gas_report_traces: Vec::new(),
-        }
+            start.elapsed(),
+        );
+        trace!(?test_result.duration, gas, reverted, should_fail, success);
+        test_result
     }
 
     #[instrument(name = "invariant_test", skip_all)]
@@ -516,30 +498,26 @@ impl<'a> ContractRunner<'a> {
         identified_contracts: &ContractsByAddress,
     ) -> TestResult {
         trace!(target: "forge::test::fuzz", "executing invariant test for {:?}", func.name);
-        let TestSetup { address, logs, traces, labeled_addresses, coverage, fuzz_fixtures, .. } =
-            setup;
 
         // First, run the test normally to see if it needs to be skipped.
         let start = Instant::now();
+        let mut test_result = TestResult::new(&setup);
+
         if let Err(EvmError::SkipError) = self.executor.clone().execute_test(
             self.sender,
-            address,
+            setup.address,
             func,
             &[],
             U256::ZERO,
             Some(self.revert_decoder),
         ) {
-            return TestResult {
-                status: TestStatus::Skipped,
-                reason: None,
-                decoded_logs: decode_console_logs(&logs),
-                traces,
-                labeled_addresses,
-                kind: TestKind::Invariant { runs: 1, calls: 1, reverts: 1 },
-                coverage,
-                duration: start.elapsed(),
-                ..Default::default()
-            }
+            test_result.end_execution(
+                TestKind::Invariant { runs: 1, calls: 1, reverts: 1 },
+                TestStatus::Skipped,
+                None,
+                start.elapsed(),
+            );
+            return test_result
         };
 
         let mut evm = InvariantExecutor::new(
@@ -550,34 +528,29 @@ impl<'a> ContractRunner<'a> {
             known_contracts,
         );
 
-        let invariant_contract =
-            InvariantContract { address, invariant_function: func, abi: &self.contract.abi };
+        let invariant_contract = InvariantContract {
+            address: setup.address,
+            invariant_function: func,
+            abi: &self.contract.abi,
+        };
 
         let InvariantFuzzTestResult { error, cases, reverts, last_run_inputs, gas_report_traces } =
-            match evm.invariant_fuzz(invariant_contract.clone(), &fuzz_fixtures) {
+            match evm.invariant_fuzz(invariant_contract.clone(), &setup.fuzz_fixtures) {
                 Ok(x) => x,
                 Err(e) => {
-                    return TestResult {
-                        status: TestStatus::Failure,
-                        reason: Some(format!(
-                            "failed to set up invariant testing environment: {e}"
-                        )),
-                        decoded_logs: decode_console_logs(&logs),
-                        traces,
-                        labeled_addresses,
-                        kind: TestKind::Invariant { runs: 0, calls: 0, reverts: 0 },
-                        duration: start.elapsed(),
-                        ..Default::default()
-                    }
+                    test_result.end_execution(
+                        TestKind::Invariant { runs: 0, calls: 0, reverts: 0 },
+                        TestStatus::Failure,
+                        Some(format!("failed to set up invariant testing environment: {e}")),
+                        start.elapsed(),
+                    );
+                    return test_result
                 }
             };
 
-        let mut counterexample = None;
-        let mut logs = logs.clone();
-        let mut traces = traces.clone();
         let success = error.is_none();
         let reason = error.as_ref().and_then(|err| err.revert_reason());
-        let mut coverage = coverage.clone();
+
         match error {
             // If invariants were broken, replay the error to collect logs and traces
             Some(error) => match error {
@@ -591,11 +564,11 @@ impl<'a> ContractRunner<'a> {
                         self.executor.clone(),
                         known_contracts,
                         identified_contracts.clone(),
-                        &mut logs,
-                        &mut traces,
-                        &mut coverage,
+                        &mut test_result.logs,
+                        &mut test_result.traces,
+                        &mut test_result.coverage,
                     ) {
-                        Ok(c) => counterexample = c,
+                        Ok(c) => test_result.counterexample = c,
                         Err(err) => {
                             error!(%err, "Failed to replay invariant error");
                         }
@@ -612,9 +585,9 @@ impl<'a> ContractRunner<'a> {
                     self.executor.clone(),
                     known_contracts,
                     identified_contracts.clone(),
-                    &mut logs,
-                    &mut traces,
-                    &mut coverage,
+                    &mut test_result.logs,
+                    &mut test_result.traces,
+                    &mut test_result.coverage,
                     last_run_inputs.clone(),
                 ) {
                     error!(%err, "Failed to replay last invariant run");
@@ -622,27 +595,24 @@ impl<'a> ContractRunner<'a> {
             }
         }
 
-        TestResult {
-            status: match success {
-                true => TestStatus::Success,
-                false => TestStatus::Failure,
-            },
-            reason,
-            counterexample,
-            decoded_logs: decode_console_logs(&logs),
-            logs,
-            kind: TestKind::Invariant {
+        test_result.gas_report_traces = gas_report_traces;
+
+        // Determine test result and record execution time
+        test_result.end_execution(
+            TestKind::Invariant {
                 runs: cases.len(),
                 calls: cases.iter().map(|sequence| sequence.cases().len()).sum(),
                 reverts,
             },
-            coverage,
-            traces,
-            labeled_addresses: labeled_addresses.clone(),
-            duration: start.elapsed(),
-            gas_report_traces,
-            ..Default::default() // TODO collect debug traces on the last run or error
-        }
+            match success {
+                true => TestStatus::Success,
+                false => TestStatus::Failure,
+            },
+            reason,
+            start.elapsed(),
+        );
+        trace!(?test_result.duration, success = %success);
+        test_result
     }
 
     #[instrument(name = "fuzz_test", skip_all, fields(name = %func.signature(), %should_fail))]
@@ -665,46 +635,34 @@ impl<'a> ContractRunner<'a> {
         }
         let _guard = span.enter();
 
-        let TestSetup {
-            address,
-            mut logs,
-            mut traces,
-            mut labeled_addresses,
-            mut coverage,
-            fuzz_fixtures,
-            ..
-        } = setup;
+        let start = Instant::now();
+        let mut test_result = TestResult::new(&setup);
 
         // Run fuzz test
-        let start = Instant::now();
         let fuzzed_executor = FuzzedExecutor::new(
             self.executor.clone(),
             runner.clone(),
             self.sender,
             fuzz_config.clone(),
         );
-        let result =
-            fuzzed_executor.fuzz(func, &fuzz_fixtures, address, should_fail, self.revert_decoder);
-
-        let mut debug = Default::default();
-        let mut breakpoints = Default::default();
+        let result = fuzzed_executor.fuzz(
+            func,
+            &setup.fuzz_fixtures,
+            setup.address,
+            should_fail,
+            self.revert_decoder,
+        );
 
         // Check the last test result and skip the test
         // if it's marked as so.
         if let Some("SKIPPED") = result.reason.as_deref() {
-            return TestResult {
-                status: TestStatus::Skipped,
-                reason: None,
-                decoded_logs: decode_console_logs(&logs),
-                traces,
-                labeled_addresses,
-                kind: TestKind::Standard(0),
-                debug,
-                breakpoints,
-                coverage,
-                duration: start.elapsed(),
-                ..Default::default()
-            }
+            test_result.end_execution(
+                TestKind::Standard(0),
+                TestStatus::Skipped,
+                None,
+                start.elapsed(),
+            );
+            return test_result
         }
 
         // if should debug
@@ -724,12 +682,12 @@ impl<'a> ContractRunner<'a> {
             // rerun the last relevant test with traces
             let debug_result =
                 FuzzedExecutor::new(debug_executor, runner, self.sender, fuzz_config).single_fuzz(
-                    address,
+                    setup.address,
                     should_fail,
                     calldata,
                 );
 
-            (debug, breakpoints) = match debug_result {
+            (test_result.debug, test_result.breakpoints) = match debug_result {
                 Ok(fuzz_outcome) => match fuzz_outcome {
                     FuzzOutcome::Case(CaseOutcome { debug, breakpoints, .. }) => {
                         (debug, breakpoints)
@@ -744,41 +702,33 @@ impl<'a> ContractRunner<'a> {
             };
         }
 
+        // Collect execution result outcome.
         let kind = TestKind::Fuzz {
             median_gas: result.median_gas(false),
             mean_gas: result.mean_gas(false),
             first_case: result.first_case,
             runs: result.gas_by_case.len(),
         };
+        test_result.logs.extend(result.logs);
+        test_result.labeled_addresses.extend(result.labeled_addresses);
+        test_result.traces.extend(result.traces.map(|traces| (TraceKind::Execution, traces)));
+        test_result.coverage = merge_coverages(test_result.coverage, result.coverage);
+        test_result.counterexample = result.counterexample;
+        test_result.gas_report_traces =
+            result.gas_report_traces.into_iter().map(|t| vec![t]).collect();
 
-        // Record logs, labels and traces
-        logs.extend(result.logs);
-        labeled_addresses.extend(result.labeled_addresses);
-        traces.extend(result.traces.map(|traces| (TraceKind::Execution, traces)));
-        coverage = merge_coverages(coverage, result.coverage);
-
-        // Record test execution time
-        let duration = start.elapsed();
-        trace!(?duration, success = %result.success);
-
-        TestResult {
-            status: match result.success {
+        // Determine test result and record execution time
+        test_result.end_execution(
+            kind,
+            match result.success {
                 true => TestStatus::Success,
                 false => TestStatus::Failure,
             },
-            reason: result.reason,
-            counterexample: result.counterexample,
-            decoded_logs: decode_console_logs(&logs),
-            logs,
-            kind,
-            traces,
-            coverage,
-            labeled_addresses,
-            debug,
-            breakpoints,
-            duration,
-            gas_report_traces: result.gas_report_traces.into_iter().map(|t| vec![t]).collect(),
-        }
+            result.reason,
+            start.elapsed(),
+        );
+        trace!(?test_result.duration, success = %result.success);
+        test_result
     }
 }
 

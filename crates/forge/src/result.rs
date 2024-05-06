@@ -8,6 +8,7 @@ use foundry_compilers::artifacts::Libraries;
 use foundry_evm::{
     coverage::HitMaps,
     debug::DebugArena,
+    decode::decode_console_logs,
     executors::EvmError,
     fuzz::{CounterExample, FuzzCase, FuzzFixtures},
     traces::{CallTraceArena, CallTraceDecoder, TraceKind, Traces},
@@ -428,6 +429,31 @@ impl fmt::Display for TestResult {
 }
 
 impl TestResult {
+    pub fn new(setup: &TestSetup) -> Self {
+        Self {
+            logs: setup.logs.clone(),
+            traces: setup.traces.clone(),
+            coverage: setup.coverage.clone(),
+            labeled_addresses: setup.labeled_addresses.clone(),
+            ..Self::default()
+        }
+    }
+
+    /// Marks test end execution, set test result details.
+    pub fn end_execution(
+        &mut self,
+        test_kind: TestKind,
+        status: TestStatus,
+        reason: Option<String>,
+        duration: Duration,
+    ) {
+        self.kind = test_kind;
+        self.status = status;
+        self.reason = reason;
+        self.decoded_logs = decode_console_logs(&self.logs);
+        self.duration = duration;
+    }
+
     pub fn fail(reason: String) -> Self {
         Self { status: TestStatus::Failure, reason: Some(reason), ..Default::default() }
     }
