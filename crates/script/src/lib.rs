@@ -237,10 +237,13 @@ impl ScriptArgs {
         trace!(target: "script", "executing script command");
 
         let compiled = self.preprocess().await?.compile()?;
+        let skip_simulation = compiled.args.skip_simulation;
 
         // Move from `CompiledState` to `BundledState` either by resuming or executing and
         // simulating script.
-        let bundled = if compiled.args.resume || (compiled.args.verify && !compiled.args.broadcast)
+        let bundled = if compiled.args.resume ||
+            (compiled.args.verify && !compiled.args.broadcast) ||
+            skip_simulation
         {
             compiled.resume().await?
         } else {
@@ -293,9 +296,15 @@ impl ScriptArgs {
             pre_simulation.fill_metadata().await?.bundle().await?
         };
 
+        if skip_simulation {
+            sh_warn!("\nSIMULATION SKIPPED.")?;
+        } else {
+            sh_println!("\nSIMULATION COMPLETE.");
+        }
+
         // Exit early in case user didn't provide any broadcast/verify related flags.
         if !bundled.args.should_broadcast() {
-            sh_println!("\nSIMULATION COMPLETE. To broadcast these transactions, add --broadcast and wallet configuration(s) to the previous command. See forge script --help for more.")?;
+            sh_println!("\nTo broadcast these transactions, add --broadcast and wallet configuration(s) to the previous command. See forge script --help for more.")?;
             return Ok(());
         }
 
