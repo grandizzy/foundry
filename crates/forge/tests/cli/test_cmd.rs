@@ -2639,3 +2639,43 @@ contract ScrollForkTest is Test {
     cmd.args(["test", "--mt", "test_roll_scroll_fork_to_tx", "--evm-version", "cancun"])
         .assert_success();
 });
+
+// <https://github.com/foundry-rs/foundry/issues/5521>
+// Disallow override prank at a depth higher than the ongoing prank's depth.
+forgetest_init!(test_override_prank_at_higher_depth, |prj, cmd| {
+    prj.add_test(
+        "PrankTest.t.sol",
+        r#"
+import {Test, Vm} from "forge-std/Test.sol";
+
+contract Target {
+    Vm vm = Vm(address(bytes20(uint160(uint256(keccak256("hevm cheat code"))))));
+
+    function f() public {
+        vm.startPrank(address(0x5));
+    }
+}
+
+contract PrankTest is Test {
+    function test_override_prank_depth() public {
+        address alice = makeAddr("alice");
+        Target target = new Target();
+        vm.startPrank(alice, alice);
+        target.f();
+    }
+}
+     "#,
+    )
+    .unwrap();
+
+    cmd.args(["test", "--mt", "test_override_prank_depth"]).assert_failure().stdout_eq(str![[r#"
+...
+Ran 1 test suite [ELAPSED]: 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/PrankTest.t.sol:PrankTest
+[FAIL: vm.startPrank: cannot override an ongoing prank started at a lower call depth than the one where it was set] test_override_prank_depth() ([GAS])
+
+...
+"#]]);
+});

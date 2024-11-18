@@ -143,7 +143,13 @@ fn prank(
         ensure!(!code.is_empty(), "cannot `prank` delegate call from an EOA");
     }
 
-    if let Some(Prank { used, single_call: current_single_call, .. }) = ccx.state.prank {
+    if let Some(Prank { used, single_call: current_single_call, depth, .. }) = ccx.state.prank {
+        // See <https://github.com/foundry-rs/foundry/issues/5521>
+        // Disallow overriding ongoing pranks at lower depth.
+        ensure!(
+            depth >= ccx.ecx.journaled_state.depth(),
+            "cannot override an ongoing prank started at a lower call depth than the one where it was set"
+        );
         ensure!(used, "cannot overwrite a prank until it is applied at least once");
         // This case can only fail if the user calls `vm.startPrank` and then `vm.prank` later on.
         // This should not be possible without first calling `stopPrank`
