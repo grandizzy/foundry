@@ -81,6 +81,8 @@ impl CoverageArgs {
         // Coverage analysis requires the Solc AST output.
         config.ast = true;
 
+        config.out = config.out.join("coverage");
+
         let (project, output) = self.build(&config)?;
         sh_println!("Analysing contracts...")?;
         let report = self.prepare(&project, &output)?;
