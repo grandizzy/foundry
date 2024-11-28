@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate tracing;
 
-use alloy_dyn_abi::{DynSolValue, EventExt};
+use alloy_dyn_abi::{DynSolValue, ErrorExt, EventExt};
 use alloy_primitives::{eip191_hash_message, hex, keccak256, Address, B256};
 use alloy_provider::Provider;
 use alloy_rpc_types::{BlockId, BlockNumberOrTag::Latest};
@@ -30,6 +30,8 @@ pub mod cmd;
 pub mod tx;
 
 use args::{Cast as CastArgs, CastSubcommand, ToBaseArgs};
+use cast::traces::identifier::SignaturesIdentifier;
+use foundry_common::abi::get_error;
 
 #[macro_use]
 extern crate foundry_common;
@@ -215,6 +217,28 @@ async fn main_args(args: CastArgs) -> Result<()> {
             let event = get_event(sig.as_str())?;
             let decoded_event = event.decode_log_parts(None, &hex::decode(data)?, false)?;
             print_tokens(&decoded_event.body);
+        }
+        CastSubcommand::DecodeError { sig, data } => {
+            let error = if let Some(err_sig) = sig {
+                get_error(err_sig.as_str())?
+            } else {
+                let data = data.strip_prefix("0x").unwrap_or(data.as_str());
+                let selector = &data[..8];
+                let err = SignaturesIdentifier::new(Config::foundry_cache_dir(), true)?
+                    .write()
+                    .await
+                    .identify_error(&hex::decode(selector)?)
+                    .await;
+                if err.is_none() {
+                    eyre::bail!("No matching error signature found for selector `{selector}`")
+                }
+
+                let error = err.unwrap();
+                let _ = sh_println!("{}", error.signature());
+                error
+            };
+            let decoded_error = error.decode_error(&hex::decode(data)?)?;
+            print_tokens(&decoded_error.body);
         }
         CastSubcommand::Interface(cmd) => cmd.run().await?,
         CastSubcommand::CreationCode(cmd) => cmd.run().await?,
