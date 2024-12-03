@@ -2667,6 +2667,7 @@ Suite result: FAILED. 0 passed; 1 failed; 0 skipped; [ELAPSED]
 });
 
 // Tests that test traces display state changes when running with verbosity.
+#[cfg(not(feature = "isolate-by-default"))]
 forgetest_init!(should_show_state_changes, |prj, cmd| {
     cmd.args(["test", "--mt", "test_Increment", "-vvvvv"]).assert_success().stdout_eq(str![[r#"
 ...
