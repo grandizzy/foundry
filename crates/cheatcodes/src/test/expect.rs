@@ -87,6 +87,8 @@ pub struct ExpectedRevert {
     pub reverter: Option<Address>,
     /// Actual reverter of the call.
     pub reverted_by: Option<Address>,
+    /// Max depth at which call reverted. Filled in by inspector during next call execution.
+    pub reverted_depth: u64,
     /// Number of times this revert is expected.
     pub count: u64,
     /// Actual number of times this revert has been seen.
@@ -774,6 +776,7 @@ fn expect_revert(
         partial_match,
         reverter,
         reverted_by: None,
+        reverted_depth: 0,
         count,
         actual_count: 0,
     });
@@ -805,6 +808,13 @@ pub(crate) fn handle_expect_revert(
         }
         hex::encode_prefixed(data)
     };
+
+    if !is_cheatcode {
+        ensure!(
+            expected_revert.reverted_depth > expected_revert.depth,
+            "call didn't revert at a lower depth than cheatcode call depth"
+        );
+    }
 
     if expected_revert.count == 0 {
         if expected_revert.reverter.is_none() && expected_revert.reason.is_none() {
