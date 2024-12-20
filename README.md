@@ -112,6 +112,10 @@ You can find additional setup and configurations guides in the [Foundry Book][fo
 
 See our [contributing guidelines](./CONTRIBUTING.md).
 
+## Release process
+
+<img src=".github/release.svg" alt="Foundry releases" />
+
 ## Getting Help
 
 First, see if the answer to your question can be found in [book][foundry-book], or in the relevant crate.
