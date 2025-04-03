@@ -2,9 +2,6 @@
 
 // Test cache is invalidated when `forge build` if optimize test option toggled.
 forgetest_init!(toggle_invalidate_cache_on_build, |prj, cmd| {
-    prj.update_config(|config| {
-        config.cache_tests = true;
-    });
     // All files are built with optimized tests.
     cmd.args(["build"]).with_no_redact().assert_success().stdout_eq(str![[r#"
 ...
@@ -22,7 +19,7 @@ No files changed, compilation skipped
 
     // Toggle test optimizer off.
     prj.update_config(|config| {
-        config.cache_tests = false;
+        config.dynamic_test_linking = false;
     });
     // All files are rebuilt with preprocessed cache false.
     cmd.with_no_redact().assert_success().stdout_eq(str![[r#"
@@ -35,9 +32,6 @@ Compiling 22 files with [..]
 
 // Test cache is invalidated when `forge test` if optimize test option toggled.
 forgetest_init!(toggle_invalidate_cache_on_test, |prj, cmd| {
-    prj.update_config(|config| {
-        config.cache_tests = true;
-    });
     // All files are built with optimized tests.
     cmd.args(["test"]).with_no_redact().assert_success().stdout_eq(str![[r#"
 ...
@@ -55,7 +49,7 @@ No files changed, compilation skipped
 
     // Toggle test optimizer off.
     prj.update_config(|config| {
-        config.cache_tests = false;
+        config.dynamic_test_linking = false;
     });
     // All files are rebuilt with preprocessed cache false.
     cmd.with_no_redact().assert_success().stdout_eq(str![[r#"
@@ -74,9 +68,6 @@ Compiling 20 files with [..]
 //     └── Counter.t.sol
 forgetest_init!(preprocess_contract_with_no_interface, |prj, cmd| {
     prj.wipe_contracts();
-    prj.update_config(|config| {
-        config.cache_tests = true;
-    });
 
     prj.add_source(
         "Counter.sol",
@@ -201,9 +192,6 @@ Compiling 1 files with [..]
 //     └── Counter.t.sol
 forgetest_init!(preprocess_contract_with_interface, |prj, cmd| {
     prj.wipe_contracts();
-    prj.update_config(|config| {
-        config.cache_tests = true;
-    });
 
     prj.add_source(
         "interface/CounterIf.sol",
@@ -341,9 +329,6 @@ Compiling 1 files with [..]
 //         └── CounterMock.sol
 forgetest_init!(preprocess_mock_without_inheritance, |prj, cmd| {
     prj.wipe_contracts();
-    prj.update_config(|config| {
-        config.cache_tests = true;
-    });
 
     prj.add_source(
         "Counter.sol",
@@ -498,9 +483,6 @@ Compiling 2 files with [..]
 //        └── CounterMock.sol
 forgetest_init!(preprocess_mock_with_inheritance, |prj, cmd| {
     prj.wipe_contracts();
-    prj.update_config(|config| {
-        config.cache_tests = true;
-    });
 
     prj.add_source(
         "Counter.sol",
@@ -638,7 +620,7 @@ Compiling 2 files with [..]
 forgetest_init!(preprocess_mock_to_non_mock, |prj, cmd| {
     prj.wipe_contracts();
     prj.update_config(|config| {
-        config.cache_tests = true;
+        config.dynamic_test_linking = true;
     });
 
     prj.add_source(
@@ -753,7 +735,7 @@ Compiling 2 files with [..]
 forgetest_init!(preprocess_multiple_contracts_with_constructors, |prj, cmd| {
     prj.wipe_contracts();
     prj.update_config(|config| {
-        config.cache_tests = true;
+        config.dynamic_test_linking = true;
     });
 
     prj.add_source(
@@ -1020,7 +1002,7 @@ Compiling 1 files with [..]
 forgetest_init!(preprocess_contracts_with_payable_constructor_and_salt, |prj, cmd| {
     prj.wipe_contracts();
     prj.update_config(|config| {
-        config.cache_tests = true;
+        config.dynamic_test_linking = true;
     });
 
     prj.add_source(
