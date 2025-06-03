@@ -219,10 +219,8 @@ impl EvmOpts {
     pub fn get_compute_units_per_second(&self) -> u64 {
         if self.no_rpc_rate_limit {
             u64::MAX
-        } else if let Some(cups) = self.compute_units_per_second {
-            return cups;
         } else {
-            ALCHEMY_FREE_TIER_CUPS
+            self.compute_units_per_second.unwrap_or(ALCHEMY_FREE_TIER_CUPS)
         }
     }
 
