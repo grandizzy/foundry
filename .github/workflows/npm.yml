@@ -73,7 +73,7 @@ jobs:
       - name: Setup Node (for npm publish auth)
         uses: actions/setup-node@v4
         with:
-          node-version: lts
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Dependencies
@@ -147,7 +147,7 @@ jobs:
       - name: Setup Node (for npm publish auth)
         uses: actions/setup-node@v4
         with:
-          node-version: lts
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Dependencies
