@@ -10,7 +10,7 @@ extern crate tracing;
 
 use alloy_dyn_abi::{DynSolValue, JsonAbiExt};
 use alloy_primitives::{
-    Address, Bytes, Log,
+    Address, Bytes, Log, U256,
     map::{AddressHashMap, HashMap},
 };
 use foundry_common::{calc, contracts::ContractsByAddress};
@@ -48,6 +48,8 @@ pub struct CallDetails {
     pub target: Address,
     // The data of the transaction.
     pub calldata: Bytes,
+    // The call value.
+    pub call_value: U256,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -77,6 +79,8 @@ pub struct BaseCounterExample {
     pub args: Option<String>,
     /// Unformatted args used to call the function.
     pub raw_args: Option<String>,
+    /// The call value.
+    pub call_value: Option<U256>,
     /// Counter example traces.
     #[serde(skip)]
     pub traces: Option<SparsedTraceArena>,
@@ -88,22 +92,21 @@ pub struct BaseCounterExample {
 impl BaseCounterExample {
     /// Creates counter example representing a step from invariant call sequence.
     pub fn from_invariant_call(
-        sender: Address,
-        addr: Address,
-        bytes: &Bytes,
+        tx: &BasicTxDetails,
         contracts: &ContractsByAddress,
         traces: Option<SparsedTraceArena>,
         show_solidity: bool,
     ) -> Self {
-        if let Some((name, abi)) = &contracts.get(&addr)
-            && let Some(func) = abi.functions().find(|f| f.selector() == bytes[..4])
+        if let Some((name, abi)) = &contracts.get(&tx.call_details.target)
+            && let Some(func) =
+                abi.functions().find(|f| f.selector() == tx.call_details.calldata[..4])
         {
             // skip the function selector when decoding
-            if let Ok(args) = func.abi_decode_input(&bytes[4..]) {
+            if let Ok(args) = func.abi_decode_input(&tx.call_details.calldata[4..]) {
                 return Self {
-                    sender: Some(sender),
-                    addr: Some(addr),
-                    calldata: bytes.clone(),
+                    sender: Some(tx.sender),
+                    addr: Some(tx.call_details.target),
+                    calldata: tx.call_details.calldata.clone(),
                     contract_name: Some(name.clone()),
                     func_name: Some(func.name.clone()),
                     signature: Some(func.signature()),
@@ -111,6 +114,7 @@ impl BaseCounterExample {
                     raw_args: Some(
                         foundry_common::fmt::format_tokens_raw(&args).format(", ").to_string(),
                     ),
+                    call_value: Some(tx.call_details.call_value),
                     traces,
                     show_solidity,
                 };
@@ -118,14 +122,15 @@ impl BaseCounterExample {
         }
 
         Self {
-            sender: Some(sender),
-            addr: Some(addr),
-            calldata: bytes.clone(),
+            sender: Some(tx.sender),
+            addr: Some(tx.call_details.target),
+            calldata: tx.call_details.calldata.clone(),
             contract_name: None,
             func_name: None,
             signature: None,
             args: None,
             raw_args: None,
+            call_value: Some(tx.call_details.call_value),
             traces,
             show_solidity: false,
         }
@@ -146,6 +151,7 @@ impl BaseCounterExample {
             signature: None,
             args: Some(foundry_common::fmt::format_tokens(&args).format(", ").to_string()),
             raw_args: Some(foundry_common::fmt::format_tokens_raw(&args).format(", ").to_string()),
+            call_value: None,
             traces,
             show_solidity: false,
         }
@@ -192,9 +198,15 @@ impl fmt::Display for BaseCounterExample {
         }
 
         if let Some(args) = &self.args {
-            write!(f, " args=[{args}]")
+            write!(f, " args=[{args}]")?
         } else {
-            write!(f, " args=[]")
+            write!(f, " args=[]")?
+        }
+
+        if let Some(value) = &self.call_value {
+            write!(f, " value=[{value}]")
+        } else {
+            write!(f, "")
         }
     }
 }

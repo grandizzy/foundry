@@ -114,7 +114,11 @@ impl FuzzedExecutor {
         ]
         .prop_map(move |calldata| BasicTxDetails {
             sender: Default::default(),
-            call_details: CallDetails { target: Default::default(), calldata },
+            call_details: CallDetails {
+                target: Default::default(),
+                calldata,
+                call_value: U256::ZERO,
+            },
         });
         // We want to collect at least one trace which will be displayed to user.
         let max_traces_to_collect = std::cmp::max(1, self.config.gas_report_samples) as usize;
@@ -302,18 +306,20 @@ impl FuzzedExecutor {
         calldata: Bytes,
         coverage_metrics: &mut CorpusManager,
     ) -> Result<FuzzOutcome, TestCaseError> {
+        let call_details =
+            CallDetails { target: address, calldata: calldata.clone(), call_value: U256::ZERO };
         let mut call = self
             .executor
-            .call_raw(self.sender, address, calldata.clone(), U256::ZERO)
+            .call_raw(
+                self.sender,
+                call_details.target,
+                call_details.calldata.clone(),
+                call_details.call_value,
+            )
             .map_err(|e| TestCaseError::fail(e.to_string()))?;
         let new_coverage = coverage_metrics.merge_edge_coverage(&mut call);
-        coverage_metrics.process_inputs(
-            &[BasicTxDetails {
-                sender: self.sender,
-                call_details: CallDetails { target: address, calldata: calldata.clone() },
-            }],
-            new_coverage,
-        );
+        coverage_metrics
+            .process_inputs(&[BasicTxDetails { sender: self.sender, call_details }], new_coverage);
 
         // Handle `vm.assume`.
         if call.result.as_ref() == MAGIC_ASSUME {

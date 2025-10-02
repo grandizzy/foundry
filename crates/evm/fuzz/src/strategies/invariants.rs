@@ -5,7 +5,7 @@ use crate::{
     strategies::{EvmFuzzState, fuzz_calldata_from_state, fuzz_param},
 };
 use alloy_json_abi::Function;
-use alloy_primitives::Address;
+use alloy_primitives::{Address, U256};
 use parking_lot::RwLock;
 use proptest::prelude::*;
 use rand::seq::IteratorRandom;
@@ -132,6 +132,6 @@ pub fn fuzz_contract_with_calldata(
     ]
     .prop_map(move |calldata| {
         trace!(input=?calldata);
-        CallDetails { target, calldata }
+        CallDetails { target, calldata, call_value: U256::ZERO }
     })
 }

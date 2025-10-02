@@ -56,9 +56,7 @@ pub fn replay_run(
 
         // Create counter example to be used in failed case.
         counterexample_sequence.push(BaseCounterExample::from_invariant_call(
-            tx.sender,
-            tx.call_details.target,
-            &tx.call_details.calldata,
+            tx,
             &ided_contracts,
             call_result.traces,
             show_solidity,

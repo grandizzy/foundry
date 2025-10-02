@@ -652,6 +652,7 @@ mod tests {
             call_details: foundry_evm_fuzz::CallDetails {
                 target: Address::ZERO,
                 calldata: Bytes::new(),
+                call_value: U256::ZERO,
             },
         }
     }
